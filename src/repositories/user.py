@@ -63,3 +63,7 @@ class UserRepository:
             raise
 
         return user
+
+    async def get_all_users(self) -> list[User]:
+        result = await self.session.scalars(select(User))
+        return list(result)
