@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     debug_mode: bool = False
 
     bot_token: str
+    gemini_api_key: str
 
     db_host: str = "localhost"
     db_port: int = 5432
