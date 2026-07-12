@@ -4,17 +4,19 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from db.enums import ProviderEnum
+from repositories.account import AccountRepository
 from repositories.user import UserRepository
 from telegram.keyboards import main_menu_keyboard
 from telegram.states import RegistrationStates
 
 router = Router()
 user_repo = UserRepository()
+account_repo = AccountRepository()
 
 
 @router.message(CommandStart())
 async def start_handler(message: Message, state: FSMContext) -> None:
-    account = await user_repo.get_account_by_chat_id(message.from_user.id)
+    account = await account_repo.get_by_chat_id(message.from_user.id)
 
     if account:
         await message.answer(
@@ -29,6 +31,10 @@ async def start_handler(message: Message, state: FSMContext) -> None:
 
 @router.message(RegistrationStates.name)
 async def handle_name(message: Message, state: FSMContext) -> None:
+    if not message.text:
+        await message.answer("Please enter a valid name.")
+        return
+
     name = message.text.strip()
 
     if not name or len(name) < 2:
