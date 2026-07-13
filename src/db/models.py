@@ -43,6 +43,16 @@ class User(BaseTimeStamp):
     payments: Mapped[list["Payment"]] = relationship(back_populates="paid_by", foreign_keys="Payment.paid_by_id")
     splits: Mapped[list["Split"]] = relationship(back_populates="owed_by", foreign_keys="Split.owed_by_id")
 
+    created_rooms: Mapped[list["Room"]] = relationship(back_populates="created_by", foreign_keys="Room.created_by_id")
+    room_memberships: Mapped[list["RoomMember"]] = relationship(
+        back_populates="user",
+        foreign_keys="RoomMember.user_id",
+    )
+    added_memberships: Mapped[list["RoomMember"]] = relationship(
+        back_populates="added_by",
+        foreign_keys="RoomMember.added_by_id",
+    )
+
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -54,6 +64,29 @@ class Account(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="accounts")
+
+
+class Room(BaseTimeStamp):
+    __tablename__ = "rooms"
+
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+
+    created_by: Mapped["User"] = relationship(back_populates="created_rooms", foreign_keys=[created_by_id])
+    members: Mapped[list["RoomMember"]] = relationship(back_populates="room")
+
+
+class RoomMember(BaseTimeStamp):
+    __tablename__ = "room_members"
+    __table_args__ = (UniqueConstraint("room_id", "user_id", name="uq_room_member"),)
+
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    added_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    room: Mapped["Room"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship(back_populates="room_memberships", foreign_keys=[user_id])
+    added_by: Mapped["User | None"] = relationship(back_populates="added_memberships", foreign_keys=[added_by_id])
 
 
 class Category(Base):
