@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 from sqlalchemy import (
@@ -12,6 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from db.enums import ProviderEnum
@@ -71,6 +73,9 @@ class Room(BaseTimeStamp):
 
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    invite_token: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4
+    ) # TODO -> Develop an mechanism to rotate invite token
 
     created_by: Mapped["User"] = relationship(back_populates="created_rooms", foreign_keys=[created_by_id])
     members: Mapped[list["RoomMember"]] = relationship(back_populates="room")
