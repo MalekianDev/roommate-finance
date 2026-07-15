@@ -6,7 +6,7 @@ from aiogram.types import Message
 from db.enums import ProviderEnum
 from repositories.account import AccountRepository
 from repositories.user import UserRepository
-from telegram.keyboards import main_menu_keyboard
+from telegram.keyboards import main_menu_keyboard, manage_rooms_keyboard
 from telegram.states import RegistrationStates
 
 router = Router()
@@ -19,9 +19,14 @@ async def start_handler(message: Message, state: FSMContext) -> None:
     account = await account_repo.get_by_chat_id(message.from_user.id)
 
     if account:
+        user_has_active_room = await user_repo.has_active_room(account.user.id)
         await message.answer(
-            "Welcome back! 👋",
-            reply_markup=main_menu_keyboard(is_superuser=account.user.is_superuser),
+            "Hey! 👋",
+            reply_markup=(
+                manage_rooms_keyboard(has_active_room=user_has_active_room)
+                if not user_has_active_room
+                else main_menu_keyboard(is_superuser=account.user.is_superuser)
+            ),
         )
         return
 

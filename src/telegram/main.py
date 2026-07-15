@@ -6,7 +6,7 @@ from aiogram.enums import ParseMode
 
 from settings import Settings
 from telegram.middlewares.db import DBSessionMiddleware
-from telegram.handlers.start_command import router as start_router
+from telegram.handlers import start_router
 
 settings = Settings()
 dispatcher = Dispatcher()
