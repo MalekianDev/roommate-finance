@@ -1,4 +1,4 @@
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
@@ -34,12 +34,13 @@ async def start_handler(message: Message, state: FSMContext) -> None:
     await state.set_state(RegistrationStates.name)
 
 
-@router.message(RegistrationStates.name)
-async def handle_name(message: Message, state: FSMContext) -> None:
-    if not message.text:
-        await message.answer("Please enter a valid name.")
-        return
+@router.message(RegistrationStates.name, ~F.text)
+async def handle_wrong_type_name(message: Message, state: FSMContext) -> None:
+    await message.answer("Please enter a valid name.")
 
+
+@router.message(RegistrationStates.name, F.text)
+async def handle_name(message: Message, state: FSMContext) -> None:
     name = message.text.strip()
 
     if not name or len(name) < 2:
