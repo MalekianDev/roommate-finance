@@ -24,23 +24,27 @@ class UserRepository(BaseRepository[User]):
         """
         Register a new user.
         """
-        first_user = await self.session.scalar(select(User).limit(1))
-        is_superuser = first_user is None
+        is_superuser = not await self.session.scalar(select(exists().where(User.id.is_not(None))))
 
         user = User(name=name, username=username, is_superuser=is_superuser)
-        account = Account(user_id=user.id, provider=provider, uid=uid)
-
         self.session.add(user)
-        self.session.add(account)
+        await self.session.flush()
+
+        self.session.add(
+            Account(
+                user=user,
+                provider=provider,
+                uid=uid,
+            )
+        )
 
         try:
-            await self.session.flush()
             await self._commit_and_refresh(user)
         except IntegrityError as e:
-            error = str(e.orig)
-            if "users_username_key" in error:
+            constraint = getattr(e.orig, "constraint_name", None)
+            if constraint == "users_username_key":
                 raise ValueError("Username already taken.")
-            if "accounts_provider_uid" in error:
+            if constraint == "accounts_provider_uid_key":
                 raise ValueError("Account already registered.")
             raise
 
