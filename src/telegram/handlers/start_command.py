@@ -4,10 +4,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from db.enums import ProviderEnum
-from repositories.account import AccountRepository
-from repositories.user import UserRepository
-from telegram.keyboards import main_menu_keyboard, manage_rooms_keyboard
+from repositories import UserRepository, AccountRepository
+from telegram.keyboards import main_menu_keyboard
 from telegram.states import RegistrationStates
+from telegram.helpers import get_first_stage
 
 router = Router()
 user_repo = UserRepository()
@@ -16,22 +16,8 @@ account_repo = AccountRepository()
 
 @router.message(CommandStart())
 async def start_handler(message: Message, state: FSMContext) -> None:
-    account = await account_repo.get_by_chat_id(message.from_user.id)
-
-    if account:
-        user_has_active_room = await user_repo.has_active_room(account.user.id)
-        await message.answer(
-            "Hey! 👋",
-            reply_markup=(
-                manage_rooms_keyboard(has_active_room=user_has_active_room)
-                if not user_has_active_room
-                else main_menu_keyboard(is_superuser=account.user.is_superuser)
-            ),
-        )
-        return
-
-    await message.answer("👋 Welcome! Let's get you registered.\n\nWhat's your name?")
-    await state.set_state(RegistrationStates.name)
+    text, keybaord = await get_first_stage(chat_id=message.from_user.id, state=state, custom_text="👋 Hey")
+    await message.reply(text, reply_markup=keybaord)
 
 
 @router.message(RegistrationStates.name, ~F.text)

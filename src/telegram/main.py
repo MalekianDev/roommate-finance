@@ -6,13 +6,15 @@ from aiogram.enums import ParseMode
 
 from settings import Settings
 from telegram.middlewares.db import DBSessionMiddleware
-from telegram.handlers import start_router
+from telegram.handlers import start_router, room_router, back_router
 
 settings = Settings()
 dispatcher = Dispatcher()
 dispatcher.update.middleware(DBSessionMiddleware())
 
 dispatcher.include_router(start_router)
+dispatcher.include_router(back_router)
+dispatcher.include_router(room_router)
 
 
 async def main() -> None:

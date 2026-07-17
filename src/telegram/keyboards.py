@@ -1,7 +1,16 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 
 BACK_BUTTON = [KeyboardButton(text="🔙 Back")]
+BACK_KEYBOARD = ReplyKeyboardMarkup(keyboard=[BACK_BUTTON], resize_keyboard=True)
+
+
+YES_NO_KEYBOARD = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="✅ Yes"), KeyboardButton(text="❌ No")],
+    ],
+    resize_keyboard=True,
+)
 
 
 def main_menu_keyboard(is_superuser: bool = False) -> ReplyKeyboardMarkup:
