@@ -1,7 +1,10 @@
 from abc import ABC
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import select, delete
+from sqlalchemy.engine import Row
+from sqlalchemy.orm import InstrumentedAttribute
 
 from db.models import Base
 from db.context import get_current_session
@@ -37,8 +40,39 @@ class BaseRepository[T: Base](ABC):
 
         return obj
 
-    async def get_all(self) -> Sequence[T]:
-        result = await self.session.scalars(select(self.model))
+    async def find_all(
+        self,
+        columns: Sequence[InstrumentedAttribute[Any]] | None = None,
+    ) -> Sequence[T] | Sequence[Any] | Sequence[Row[tuple[Any, ...]]]:
+        """
+        Fetch all rows for the repository model or a selected set of columns.
+
+        Args:
+            columns: Optional sequence of SQLAlchemy model attributes such as
+                `User.id` or `[User.id, User.name]`.
+
+        Returns:
+            - `Sequence[T]` when `columns` is omitted.
+            - `Sequence[Any]` when `columns` contains exactly one attribute.
+            - `Sequence[Row[tuple[Any, ...]]]` when `columns` contains multiple
+              attributes, in the same order they were requested.
+
+        Examples:
+            `await user_repo.find_all()`
+                Returns: `[User(...), User(...)]`
+
+            `await user_repo.find_all(columns=[User.id])`
+                Returns: `[1, 2, 3]`
+
+            `await user_repo.find_all(columns=[User.id, User.name])`
+                Returns: `[(1, "alice"), (2, "bob")]`
+        """
+        if not columns:
+            result = await self.session.scalars(select(self.model))
+        elif len(columns) == 1:
+            result = await self.session.scalars(select(columns[0]))
+        else:
+            result = await self.session.execute(select(*columns))
 
         return result.all()
 
