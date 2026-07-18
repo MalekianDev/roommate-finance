@@ -2,6 +2,10 @@ from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 
+from settings import Settings
+from db.models import Room
+from repositories import RoomRepository, AccountRepository
+
 from telegram.states import RoomStates
 from telegram.keyboards import BACK_KEYBOARD, YES_NO_KEYBOARD
 from telegram.helpers import get_first_stage
@@ -37,9 +41,20 @@ async def handle_room_name(message: Message, state: FSMContext) -> None:
 
 @router.message(RoomStates.confirming, F.text == "✅ Yes")
 async def handle_confirm_room(message: Message, state: FSMContext) -> None:
-    room_name = await state.get_data("room_name")
-    # TODO -> Handle room creation logic
-    await message.answer(f"✅ Room {room_name} created.")
+    settings = Settings()
+    data = await state.get_data()
+
+    account = await AccountRepository().get_by_chat_id(message.from_user.id)
+    room = await RoomRepository().create(Room(name=data["room_name"], created_by=account.user))
+
+    text, keyboard = await get_first_stage(
+        chat_id=message.from_user.id,
+        state=state,
+        account=account,
+        custom_text=f"✅ Room <code>{room.name}</code> created.\n\nNow you should send this URL to your roommates:\n\n"
+        f"<a href='https://t.me/{settings.bot_username}?start={room.invite_token}'>INVITE LINK</a>",
+    )
+    await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 @router.message(RoomStates.confirming, F.text == "❌ No")

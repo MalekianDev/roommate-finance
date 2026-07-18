@@ -1,7 +1,9 @@
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup
 
+from db.models import Account
 from repositories import UserRepository, AccountRepository
+
 from telegram.states import RegistrationStates
 from telegram.keyboards import main_menu_keyboard, manage_rooms_keyboard
 
@@ -9,6 +11,7 @@ from telegram.keyboards import main_menu_keyboard, manage_rooms_keyboard
 async def get_first_stage(
     chat_id: int,
     state: FSMContext | None = None,
+    account: Account | None = None,
     custom_text: str | None = None,
 ) -> tuple[str, ReplyKeyboardMarkup]:
     """
@@ -27,12 +30,11 @@ async def get_first_stage(
     Return:
         tuple[str, ReplyKeyboardMarkup]: The text and keyboard to show to the user.
     """
-    account_repo = AccountRepository()
-    account = await account_repo.get_by_chat_id(chat_id)
+    if account is None:
+        account = await AccountRepository().get_by_chat_id(chat_id)
 
     if account:
-        user_repo = UserRepository()
-        user_has_active_room = await user_repo.has_active_room(account.user_id)
+        user_has_active_room = await UserRepository().has_active_room(account.user_id)
 
         if user_has_active_room:
             text, keyboard = custom_text or "Main menu:", main_menu_keyboard(is_superuser=account.is_superuser)
