@@ -4,7 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     debug_mode: bool = False
 
-    bot_username: str
     bot_token: str
     gemini_api_key: str
 

@@ -1,9 +1,8 @@
-from aiogram import Router, F
+from aiogram import Bot, Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
+from aiogram.utils.deep_linking import create_start_link
 
-from settings import Settings
-from db.models import Room
 from repositories import RoomRepository, AccountRepository
 
 from telegram.states import RoomStates
@@ -40,19 +39,17 @@ async def handle_room_name(message: Message, state: FSMContext) -> None:
 
 
 @router.message(RoomStates.confirming, F.text == "✅ Yes")
-async def handle_confirm_room(message: Message, state: FSMContext) -> None:
-    settings = Settings()
+async def handle_confirm_room(message: Message, state: FSMContext, bot: Bot) -> None:
     data = await state.get_data()
-
-    account = await AccountRepository().get_by_chat_id(message.from_user.id)
-    room = await RoomRepository().create(Room(name=data["room_name"], created_by=account.user))
+    account = await AccountRepository().get_by_chat_id(chat_id=message.from_user.id)
+    room = await RoomRepository().register_room(name=data["room_name"], created_by=account.user)
 
     text, keyboard = await get_first_stage(
         chat_id=message.from_user.id,
         state=state,
         account=account,
         custom_text=f"✅ Room <code>{room.name}</code> created.\n\nNow you should send this URL to your roommates:\n\n"
-        f"<a href='https://t.me/{settings.bot_username}?start={room.invite_token}'>INVITE LINK</a>",
+        f"<a href='{await create_start_link(bot, room.invite_token, encode=True)}'>INVITE LINK</a>",
     )
     await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
 
