@@ -5,6 +5,8 @@ from typing import Any
 from sqlalchemy import select, delete
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.orm.interfaces import ORMOption
+from sqlalchemy.sql.elements import ColumnElement
 
 from db.models import Base
 from db.context import get_current_session
@@ -67,14 +69,74 @@ class BaseRepository[T: Base](ABC):
             `await user_repo.find_all(columns=[User.id, User.name])`
                 Returns: `[(1, "alice"), (2, "bob")]`
         """
-        if not columns:
-            result = await self.session.scalars(select(self.model))
-        elif len(columns) == 1:
-            result = await self.session.scalars(select(columns[0]))
+        stmt, is_scalar_result = self._build_select(columns)
+
+        if is_scalar_result:
+            result = await self.session.scalars(stmt)
         else:
-            result = await self.session.execute(select(*columns))
+            result = await self.session.execute(stmt)
 
         return result.all()
+
+    async def find(
+        self,
+        filters: Sequence[ColumnElement[bool]] | None = None,
+        columns: Sequence[InstrumentedAttribute[Any]] | None = None,
+        options: Sequence[ORMOption] | None = None,
+    ) -> T | Any | Row[tuple[Any, ...]] | None:
+        """
+        Fetch the first row matching the given filters.
+
+        This helper is intended for simple repository lookups where you need
+        optional filtering, column selection, or ORM loading options. For more
+        complex queries with explicit joins, aliases, aggregates, or custom row
+        shapes, prefer a repository-specific method instead of forcing that
+        logic into this generic helper.
+
+        Args:
+            filters: Optional sequence of SQLAlchemy filter expressions such as
+                `[User.id == 1]` or `[User.username == "alice"]`.
+            columns: Optional sequence of SQLAlchemy model attributes such as
+                `User.id` or `[User.id, User.name]`.
+            options: Optional sequence of ORM loader options such as
+                `[joinedload(Account.user)]`.
+
+        Returns:
+            - `T | None` when `columns` is omitted.
+            - `Any | None` when `columns` contains exactly one attribute.
+            - `Row[tuple[Any, ...]] | None` when `columns` contains multiple
+              attributes, in the same order they were requested.
+
+        Examples:
+            `await user_repo.find(filters=[User.id == 1])`
+                Returns: `User(...)` or `None`
+
+            `await user_repo.find(filters=[User.id == 1], columns=[User.name])`
+                Returns: `"alice"` or `None`
+
+            `await user_repo.find(filters=[User.id == 1], columns=[User.id, User.name])`
+                Returns: `(1, "alice")` or `None`
+
+            `await account_repo.find(
+                filters=[Account.uid == "123"],
+                options=[joinedload(Account.user)],
+            )`
+                Returns: `Account(...)` with `user` eagerly loaded, or `None`
+        """
+        stmt, is_scalar_result = self._build_select(columns)
+
+        if options:
+            stmt = stmt.options(*options)
+
+        if filters:
+            stmt = stmt.where(*filters)
+
+        if is_scalar_result:
+            return await self.session.scalar(stmt)
+
+        result = await self.session.execute(stmt)
+
+        return result.first()
 
     async def get_by_id(self, obj_id: int) -> T | None:
         result = await self.session.get(self.model, obj_id)
@@ -94,6 +156,18 @@ class BaseRepository[T: Base](ABC):
     async def delete_by_id(self, obj_id: int) -> None:
         await self.session.execute(delete(self.model).where(self.model.id == obj_id))
         await self._commit()
+
+    def _build_select(
+        self,
+        columns: Sequence[InstrumentedAttribute[Any]] | None = None,
+    ) -> tuple[Any, bool]:
+        if not columns:
+            return select(self.model), True
+
+        if len(columns) == 1:
+            return select(columns[0]), True
+
+        return select(*columns), False
 
     async def _commit(self) -> None:
         if self.commit:

@@ -1,17 +1,48 @@
+import uuid
+
 from aiogram import Router, F
-from aiogram.filters import CommandStart
+from aiogram.utils.deep_linking import decode_payload
+from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from db.enums import ProviderEnum
-from repositories import UserRepository, AccountRepository
+from db.models import Account, Room, RoomMember
+from repositories import UserRepository, AccountRepository, RoomRepository, RoomMemberRepository
 from telegram.keyboards import main_menu_keyboard
 from telegram.states import RegistrationStates
 from telegram.helpers import get_first_stage
 
 router = Router()
-user_repo = UserRepository()
-account_repo = AccountRepository()
+
+
+@router.message(CommandStart(deep_link=True))
+async def handle_join_start(message: Message, command: CommandObject) -> None:
+    room_member_repo = RoomMemberRepository()
+
+    room_id = await RoomRepository().find(
+        filters=[Room.invite_token == uuid.UUID(decode_payload(command.args)).hex], columns=[Room.id]
+    )
+
+    if not room_id:
+        await message.answer("Invalid invite token.")
+        return
+
+    user_id = await AccountRepository().find(
+        filters=[Account.uid == str(message.from_user.id), Account.provider == ProviderEnum.TELEGRAM],
+        columns=[Account.user_id],
+    )
+    room_member = await room_member_repo.find(
+        filters=[RoomMember.room_id == room_id, RoomMember.user_id == user_id], columns=[RoomMember.id]
+    )
+
+    if room_member:
+        await message.answer("You are already in this room.")
+        return
+
+    # TODO -> Add a "JoinRequest" concept to handle room requests instead of directly adding to the room.
+    await room_member_repo.create(RoomMember(room_id=room_id, user_id=user_id))
+    await message.answer("✅ You have joined the room.")
 
 
 @router.message(CommandStart())
@@ -28,13 +59,12 @@ async def handle_wrong_type_name(message: Message, state: FSMContext) -> None:
 @router.message(RegistrationStates.name, F.text)
 async def handle_name(message: Message, state: FSMContext) -> None:
     name = message.text.strip()
-
     if not name or len(name) < 2:
         await message.answer("Please enter a valid name (at least 2 characters).")
         return
 
     try:
-        user = await user_repo.register_user(
+        user = await UserRepository().register_user(
             name=name,
             username=str(message.from_user.id),
             provider=ProviderEnum.TELEGRAM,
