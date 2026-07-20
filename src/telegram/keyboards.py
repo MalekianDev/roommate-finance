@@ -20,6 +20,7 @@ def main_menu_keyboard(is_superuser: bool = False) -> ReplyKeyboardMarkup:
             KeyboardButton(text="📊 Report"),
             KeyboardButton(text="⚖️ Balance"),
         ],
+        [KeyboardButton(text="👯 Manage Rooms")],
     ]
 
     if is_superuser:
@@ -42,7 +43,7 @@ def manage_rooms_keyboard(has_active_room: bool = True) -> ReplyKeyboardMarkup:
     if has_active_room:
         buttons.extend(
             [
-                [KeyboardButton(text="🧑‍💻 Manage Rooms")],
+                [KeyboardButton(text="🧑‍💻 Rooms list")],
                 BACK_BUTTON,
             ]
         )

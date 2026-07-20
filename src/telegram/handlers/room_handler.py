@@ -6,10 +6,15 @@ from aiogram.utils.deep_linking import create_start_link
 from repositories import RoomRepository, AccountRepository
 
 from telegram.states import RoomStates
-from telegram.keyboards import BACK_KEYBOARD, YES_NO_KEYBOARD
+from telegram.keyboards import BACK_KEYBOARD, YES_NO_KEYBOARD, manage_rooms_keyboard
 from telegram.helpers import get_first_stage
 
 router = Router()
+
+
+@router.message(F.text == "👯 Manage Rooms")
+async def manage_rooms_handler(message: Message, state: FSMContext) -> None:
+    await message.answer("Manage rooms:", reply_markup=manage_rooms_keyboard(has_active_room=True))
 
 
 @router.message(F.text == "🤝 Create Room")

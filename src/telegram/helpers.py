@@ -37,7 +37,7 @@ async def get_first_stage(
         user_has_active_room = await UserRepository().has_active_room(account.user_id)
 
         if user_has_active_room:
-            text, keyboard = custom_text or "Main menu:", main_menu_keyboard(is_superuser=account.is_superuser)
+            text, keyboard = custom_text or "Main menu:", main_menu_keyboard(is_superuser=account.user.is_superuser)
         else:
             text, keyboard = custom_text or "You need an active room:", manage_rooms_keyboard(has_active_room=False)
 
