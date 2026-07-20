@@ -36,17 +36,12 @@ def manage_rooms_keyboard(has_active_room: bool = True) -> ReplyKeyboardMarkup:
     buttons = [
         [
             KeyboardButton(text="🤝 Create Room"),
-            KeyboardButton(text="🧳 Join Room"),
         ],
     ]
 
     if has_active_room:
-        buttons.extend(
-            [
-                [KeyboardButton(text="🧑‍💻 Rooms list")],
-                BACK_BUTTON,
-            ]
-        )
+        buttons[0].append(KeyboardButton(text="🧑‍💻 Rooms list"))
+        buttons.extend([BACK_BUTTON])
 
     return ReplyKeyboardMarkup(
         keyboard=buttons,
