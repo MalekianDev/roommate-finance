@@ -108,9 +108,11 @@ class Transaction(BaseTimeStamp):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     expensed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    room_id: Mapped[int | None] = mapped_column(ForeignKey("rooms.id"), nullable=True)
 
     category: Mapped["Category"] = relationship()
     created_by: Mapped["User"] = relationship()
+    room: Mapped["Room | None"] = relationship(back_populates="transactions", foreign_keys=[room_id])
     payments: Mapped[list["Payment"]] = relationship(back_populates="transaction")
     splits: Mapped[list["Split"]] = relationship(back_populates="transaction")
 
