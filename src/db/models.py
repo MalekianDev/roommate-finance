@@ -75,10 +75,11 @@ class Room(BaseTimeStamp):
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     invite_token: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4
-    ) # TODO -> Develop an mechanism to rotate invite token
+    )  # TODO -> Develop an mechanism to rotate invite token
 
     created_by: Mapped["User"] = relationship(back_populates="created_rooms", foreign_keys=[created_by_id])
     members: Mapped[list["RoomMember"]] = relationship(back_populates="room")
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="room")
 
 
 class RoomMember(BaseTimeStamp):
@@ -108,11 +109,11 @@ class Transaction(BaseTimeStamp):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     expensed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    room_id: Mapped[int | None] = mapped_column(ForeignKey("rooms.id"), nullable=True)
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=True)
 
-    category: Mapped["Category"] = relationship()
-    created_by: Mapped["User"] = relationship()
-    room: Mapped["Room | None"] = relationship(back_populates="transactions", foreign_keys=[room_id])
+    category: Mapped["Category"] = relationship(foreign_keys=[category_id])
+    created_by: Mapped["User"] = relationship(foreign_keys=[created_by_id])
+    room: Mapped["Room"] = relationship(back_populates="transactions", foreign_keys=[room_id])
     payments: Mapped[list["Payment"]] = relationship(back_populates="transaction")
     splits: Mapped[list["Split"]] = relationship(back_populates="transaction")
 
