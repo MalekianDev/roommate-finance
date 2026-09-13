@@ -17,6 +17,11 @@ from telegram.keyboards import transaction_confirmation_keyboard
 from telegram.states import TransactionStates
 
 router = Router()
+# One in-flight parse per Telegram user. aiogram polls with handle_as_tasks=True,
+# so two expense messages in the same getUpdates batch both match StateFilter(None)
+# and would otherwise overwrite FSM `draft` — Confirm then saves the wrong expense.
+_drafting_users: set[int] = set()
+_ALREADY_PROCESSING_MESSAGE = "⏳ Already processing a transaction. Please wait."
 
 
 @router.message(F.text == "📝 Add Transaction")
@@ -37,29 +42,40 @@ async def handle_transaction_draft(message: Message, state: FSMContext) -> None:
         await message.answer("You need an active room before adding transactions.")
         return
 
-    processing_msg = await message.answer("⏳ Processing...")
+    user_id = message.from_user.id
+    if user_id in _drafting_users:
+        await message.answer(_ALREADY_PROCESSING_MESSAGE)
+        return
+    _drafting_users.add(user_id)
 
     try:
-        draft, users_map = await build_transaction_draft(
-            message=message.text, # type: ignore
-            created_by_id=account.user_id,
-        )
-    except Exception:
-        await processing_msg.edit_text("❌ Could not parse the transaction. Please try again with a clearer message.")
-        return
+        processing_msg = await message.answer("⏳ Processing...")
 
-    category_name = None
-    if draft.category_id:
-        category_name = await CategoryRepository().find(
-            filters=[Category.id == draft.category_id],
-            columns=[Category.name],
-        )
+        try:
+            draft, users_map = await build_transaction_draft(
+                message=message.text,  # type: ignore
+                created_by_id=account.user_id,
+            )
+        except Exception:
+            await processing_msg.edit_text(
+                "❌ Could not parse the transaction. Please try again with a clearer message."
+            )
+            return
 
-    summary = _format_draft_summary(draft, users_map, category_name=category_name)
+        category_name = None
+        if draft.category_id:
+            category_name = await CategoryRepository().find(
+                filters=[Category.id == draft.category_id],
+                columns=[Category.name],
+            )
 
-    await state.update_data(draft=draft.model_dump(), users_map=users_map)
-    await state.set_state(TransactionStates.confirming)
-    await processing_msg.edit_text(summary, reply_markup=transaction_confirmation_keyboard())
+        summary = _format_draft_summary(draft, users_map, category_name=category_name)
+
+        await state.update_data(draft=draft.model_dump(), users_map=users_map)
+        await state.set_state(TransactionStates.confirming)
+        await processing_msg.edit_text(summary, reply_markup=transaction_confirmation_keyboard())
+    finally:
+        _drafting_users.discard(user_id)
 
 
 @router.callback_query(F.data == "transaction:confirm", StateFilter(TransactionStates.confirming))

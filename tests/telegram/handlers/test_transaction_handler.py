@@ -1,8 +1,11 @@
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from telegram.handlers.transaction_handler import (
+    _ALREADY_PROCESSING_MESSAGE,
     handle_cancel,
     handle_confirm,
     handle_transaction_draft,
@@ -105,6 +108,95 @@ async def test_handle_transaction_draft_stores_preview_on_success(
     assert processing_msg.edit_text.await_args.kwargs["reply_markup"].inline_keyboard[0][0].callback_data == (
         "transaction:confirm"
     )
+
+
+@pytest.mark.asyncio
+async def test_handle_transaction_draft_rejects_concurrent_parse_for_same_user(
+    monkeypatch,
+    message,
+    state,
+    account,
+    transaction_draft,
+    users_map,
+):
+    """Two in-flight parses used to share one FSM draft; Confirm saved the wrong expense."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+    build_calls = 0
+
+    async def slow_build(**kwargs):
+        nonlocal build_calls
+        build_calls += 1
+        started.set()
+        await release.wait()
+        return transaction_draft, users_map
+
+    processing_msg = MagicMock()
+    processing_msg.edit_text = AsyncMock()
+    message.answer = AsyncMock(return_value=processing_msg)
+    second_message = MagicMock()
+    second_message.text = "I paid 100 for rent"
+    second_message.from_user = SimpleNamespace(id=message.from_user.id)
+    second_message.answer = AsyncMock()
+
+    account_repo = MagicMock()
+    account_repo.get_by_chat_id = AsyncMock(return_value=account)
+    user_repo = MagicMock()
+    user_repo.has_active_room = AsyncMock(return_value=True)
+    category_repo = MagicMock()
+    category_repo.find = AsyncMock(return_value="Food")
+    monkeypatch.setattr("telegram.handlers.transaction_handler.AccountRepository", lambda: account_repo)
+    monkeypatch.setattr("telegram.handlers.transaction_handler.UserRepository", lambda: user_repo)
+    monkeypatch.setattr("telegram.handlers.transaction_handler.CategoryRepository", lambda: category_repo)
+    monkeypatch.setattr("telegram.handlers.transaction_handler.build_transaction_draft", slow_build)
+
+    first = asyncio.create_task(handle_transaction_draft(message, state))
+    await started.wait()
+
+    await handle_transaction_draft(second_message, state)
+
+    second_message.answer.assert_awaited_once_with(_ALREADY_PROCESSING_MESSAGE)
+    assert build_calls == 1
+    state.set_state.assert_not_called()
+
+    release.set()
+    await first
+
+    state.set_state.assert_awaited_once_with(TransactionStates.confirming)
+    state.update_data.assert_awaited_once_with(draft=transaction_draft.model_dump(), users_map=users_map)
+    assert build_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_transaction_draft_releases_lock_after_parse_failure(
+    monkeypatch,
+    message,
+    state,
+    account,
+    transaction_draft,
+    users_map,
+):
+    processing_msg = MagicMock()
+    processing_msg.edit_text = AsyncMock()
+    message.answer = AsyncMock(return_value=processing_msg)
+    account_repo = MagicMock()
+    account_repo.get_by_chat_id = AsyncMock(return_value=account)
+    user_repo = MagicMock()
+    user_repo.has_active_room = AsyncMock(return_value=True)
+    category_repo = MagicMock()
+    category_repo.find = AsyncMock(return_value="Food")
+    monkeypatch.setattr("telegram.handlers.transaction_handler.AccountRepository", lambda: account_repo)
+    monkeypatch.setattr("telegram.handlers.transaction_handler.UserRepository", lambda: user_repo)
+    monkeypatch.setattr("telegram.handlers.transaction_handler.CategoryRepository", lambda: category_repo)
+
+    builds = AsyncMock(side_effect=[ValueError("bad json"), (transaction_draft, users_map)])
+    monkeypatch.setattr("telegram.handlers.transaction_handler.build_transaction_draft", builds)
+
+    await handle_transaction_draft(message, state)
+    await handle_transaction_draft(message, state)
+
+    assert builds.await_count == 2
+    state.set_state.assert_awaited_once_with(TransactionStates.confirming)
 
 
 @pytest.mark.asyncio
