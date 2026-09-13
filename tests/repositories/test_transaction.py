@@ -1,5 +1,5 @@
 from decimal import Decimal
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -7,11 +7,18 @@ from db.models import Payment, Split, Transaction
 from repositories.transaction import TransactionRepository
 
 
-@pytest.mark.asyncio
-async def test_create_maps_draft_into_transaction_payments_and_splits(session, transaction_draft):
+def _set_member_ids(session, user_ids):
+    result = MagicMock()
+    result.all.return_value = list(user_ids)
+    session.scalars = AsyncMock(return_value=result)
     session.flush = AsyncMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
+
+
+@pytest.mark.asyncio
+async def test_create_maps_draft_into_transaction_payments_and_splits(session, transaction_draft):
+    _set_member_ids(session, [7, 8])
     repo = TransactionRepository()
 
     result = await repo.create(transaction_draft)
@@ -38,14 +45,46 @@ async def test_create_maps_draft_into_transaction_payments_and_splits(session, t
 
 
 @pytest.mark.asyncio
-async def test_create_skips_splits_when_draft_has_none(session, transaction_draft):
+async def test_create_rejects_draft_without_a_room(session, transaction_draft):
+    transaction_draft.room_id = None
+    _set_member_ids(session, [7, 8])
+
+    with pytest.raises(ValueError, match="must belong to a room"):
+        await TransactionRepository().create(transaction_draft)
+
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_draft_without_splits(session, transaction_draft):
     transaction_draft.splits = []
-    session.flush = AsyncMock()
-    session.commit = AsyncMock()
-    session.refresh = AsyncMock()
+    _set_member_ids(session, [7, 8])
 
-    await TransactionRepository().create(transaction_draft)
+    with pytest.raises(ValueError, match="payments and splits"):
+        await TransactionRepository().create(transaction_draft)
 
-    added = [call.args[0] for call in session.add.call_args_list]
-    assert any(isinstance(obj, Payment) for obj in added)
-    assert not any(isinstance(obj, Split) for obj in added)
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_when_creator_is_not_a_room_member(session, transaction_draft):
+    _set_member_ids(session, [8])
+
+    with pytest.raises(ValueError, match="not a member"):
+        await TransactionRepository().create(transaction_draft)
+
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_splits_for_users_outside_the_room(session, transaction_draft):
+    _set_member_ids(session, [7])
+
+    with pytest.raises(ValueError, match="members of the selected room"):
+        await TransactionRepository().create(transaction_draft)
+
+    session.add.assert_not_called()
+    session.commit.assert_not_called()

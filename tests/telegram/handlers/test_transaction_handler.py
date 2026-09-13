@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -132,6 +133,70 @@ async def test_handle_confirm_saves_draft_and_clears_state(
     callback.answer.assert_awaited_once_with("Transaction saved!")
     callback.message.edit_text.assert_awaited_once_with("✅ Transaction saved successfully.")
     callback.message.answer.assert_awaited_once()
+    state.update_data.assert_awaited_once_with(draft=None)
+
+
+@pytest.mark.asyncio
+async def test_handle_confirm_ignores_duplicate_in_flight_saves(
+    monkeypatch,
+    callback,
+    state,
+    transaction_draft,
+):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_create(_draft):
+        started.set()
+        await release.wait()
+
+    state.get_data = AsyncMock(return_value={"draft": transaction_draft.model_dump()})
+    transaction_repo = MagicMock()
+    transaction_repo.create = slow_create
+    monkeypatch.setattr("telegram.handlers.transaction_handler.TransactionRepository", lambda: transaction_repo)
+    monkeypatch.setattr(
+        "telegram.handlers.transaction_handler.get_first_stage",
+        AsyncMock(return_value=("Main menu:", MagicMock())),
+    )
+
+    first = asyncio.create_task(handle_confirm(callback, state))
+    await started.wait()
+    await handle_confirm(callback, state)
+    release.set()
+    await first
+
+    assert callback.answer.await_args_list[0].args[0] == "Transaction is already being saved."
+    callback.message.edit_text.assert_awaited_once_with("✅ Transaction saved successfully.")
+
+
+@pytest.mark.asyncio
+async def test_handle_confirm_skips_when_draft_was_already_consumed(monkeypatch, callback, state):
+    state.get_data = AsyncMock(return_value={})
+    transaction_repo = MagicMock()
+    transaction_repo.create = AsyncMock()
+    monkeypatch.setattr("telegram.handlers.transaction_handler.TransactionRepository", lambda: transaction_repo)
+
+    await handle_confirm(callback, state)
+
+    transaction_repo.create.assert_not_called()
+    callback.answer.assert_awaited_once_with("This transaction was already processed.")
+    state.clear.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_confirm_reports_validation_errors(monkeypatch, callback, state, transaction_draft):
+    state.get_data = AsyncMock(return_value={"draft": transaction_draft.model_dump()})
+    transaction_repo = MagicMock()
+    transaction_repo.create = AsyncMock(side_effect=ValueError("Creator is not a member of the selected room."))
+    monkeypatch.setattr("telegram.handlers.transaction_handler.TransactionRepository", lambda: transaction_repo)
+
+    await handle_confirm(callback, state)
+
+    state.clear.assert_awaited_once()
+    callback.answer.assert_awaited_once_with("Could not save this transaction.", show_alert=True)
+    callback.message.edit_text.assert_awaited_once_with(
+        "❌ Could not save this transaction. Please describe it again."
+    )
 
 
 @pytest.mark.asyncio

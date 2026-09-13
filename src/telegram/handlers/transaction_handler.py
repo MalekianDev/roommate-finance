@@ -17,6 +17,7 @@ from telegram.keyboards import transaction_confirmation_keyboard
 from telegram.states import TransactionStates
 
 router = Router()
+_saving_transaction_users: set[int] = set()
 
 
 @router.message(F.text == "📝 Add Transaction")
@@ -64,17 +65,38 @@ async def handle_transaction_draft(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "transaction:confirm", StateFilter(TransactionStates.confirming))
 async def handle_confirm(callback: CallbackQuery, state: FSMContext) -> None:
-    data = await state.get_data()
-    draft = TransactionDraft.model_validate(data["draft"])
+    user_id = callback.from_user.id
+    if user_id in _saving_transaction_users:
+        await callback.answer("Transaction is already being saved.")
+        return
 
-    await TransactionRepository().create(draft)
-    await state.clear()
+    _saving_transaction_users.add(user_id)
+    try:
+        data = await state.get_data()
+        draft_data = data.get("draft")
+        if not draft_data:
+            await callback.answer("This transaction was already processed.")
+            return
 
-    await callback.answer("Transaction saved!")
-    await callback.message.edit_text("✅ Transaction saved successfully.")
+        await state.update_data(draft=None)
+        draft = TransactionDraft.model_validate(draft_data)
 
-    text, keyboard = await get_first_stage(chat_id=callback.from_user.id)
-    await callback.message.answer(text, reply_markup=keyboard)
+        try:
+            await TransactionRepository().create(draft)
+        except ValueError:
+            await state.clear()
+            await callback.answer("Could not save this transaction.", show_alert=True)
+            await callback.message.edit_text("❌ Could not save this transaction. Please describe it again.")
+            return
+
+        await state.clear()
+        await callback.answer("Transaction saved!")
+        await callback.message.edit_text("✅ Transaction saved successfully.")
+
+        text, keyboard = await get_first_stage(chat_id=callback.from_user.id)
+        await callback.message.answer(text, reply_markup=keyboard)
+    finally:
+        _saving_transaction_users.discard(user_id)
 
 
 @router.callback_query(F.data == "transaction:cancel", StateFilter(TransactionStates.confirming))

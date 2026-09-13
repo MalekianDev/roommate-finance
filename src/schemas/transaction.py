@@ -15,7 +15,9 @@ class Split(BaseModel):
 
 class Transaction(BaseModel):
     id: int | None = None
-    room_id: int | None = Field(description="ID of the room this transaction belongs to, or null if not in a room")
+    room_id: int | None = Field(
+        description="ID of the selected room from the user's rooms. Use the matching room, or the only room if the user has one."
+    )
     created_by_id: int = Field(description="ID of the user who created this transaction")
     description: str = Field(description="Short description of the transaction, in the same language as the input")
     category_id: int | None = Field(
@@ -23,8 +25,11 @@ class Transaction(BaseModel):
         description="Matched category ID from the provided category list, or null if no good match",
     )
     total_amount: float = Field(description="Total amount of the transaction")
-    payments: list[Payment] = Field(description="List of who paid how much")
+    payments: list[Payment] = Field(description="List of who paid how much. Must include at least one payment.")
     splits: list[Split] = Field(
         default_factory=list,
-        description="List of who owes how much. Leave empty if not specified in the message.",
+        description=(
+            "List of who owes how much. If the user does not specify splits, divide total_amount equally "
+            "across every member of the selected room. Do not leave this empty."
+        ),
     )
