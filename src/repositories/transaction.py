@@ -42,7 +42,6 @@ class TransactionRepository(BaseRepository[Transaction]):
                 )
             )
 
-        await self.session.commit()
-        await self.session.refresh(transaction)
+        await self._commit_and_refresh(transaction)
 
         return transaction

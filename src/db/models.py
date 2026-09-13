@@ -124,7 +124,7 @@ class Payment(BaseTimeStamp):
     __tablename__ = "payments"
     __table_args__ = (UniqueConstraint("transaction_id", "paid_by_id"),)
 
-    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
     transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id"), nullable=False)
     paid_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -138,7 +138,7 @@ class Split(BaseTimeStamp):
     __tablename__ = "splits"
     __table_args__ = (UniqueConstraint("transaction_id", "owed_by_id"),)
 
-    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(15, 2), nullable=False)
     transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id"), nullable=False)
     owed_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
